@@ -39,7 +39,7 @@ source venv/bin/activate
 
 And then you can use the tool according to its usage manual:
 ```
-usage: spider.py [-h] -U URL [-O FILE] [-S] [-C]
+usage: spider.py [-h] -U URL [-O FILE] [-T TIMEOUT] [-S] [-C]
 
 Scrape websites to find every URL in it recursively.
 
@@ -47,13 +47,14 @@ options:
   -h, --help  show this help message and exit
   -U URL      The main URL that will be crawled
   -O FILE     The output file of the found URLs. default=<URL>.txt
+  -T TIMEOUT  Set timeout for a request. default=3
   -S          Enables the scraping of inline text of tags like; "<p>", "<h1>", "<li>" etc.
   -C          Enables the scraping of HTML Comments
 
 Examples:
 [+] python3 spider.py -U example.com
-[+] python3 spider.py -U example.com -S
-[+] python3 spider.py -U example.com -C
+[+] python3 spider.py -U example.com -S -C
+[+] python3 spider.py -U example.com -T 5
 [+] python3 spider.py -U example.com -O example
 ```
 
