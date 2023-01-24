@@ -11,6 +11,40 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup, Comment, UnicodeDammit
 
 
+examples = """
+Examples:
+[+] python3 spider.py -U example.com
+[+] python3 spider.py -U example.com -S
+[+] python3 spider.py -U example.com -C
+[+] python3 spider.py -U example.com -O example
+"""
+
+parser = argparse.ArgumentParser(
+    description="Scrape websites to find every URL in it recursively.",
+    epilog=examples,
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
+
+parser.add_argument(
+    "-U", dest="url", type=str, required=True, help="The main URL that will be crawled"
+)
+parser.add_argument(
+    "-O",
+    dest="file",
+    type=str,
+    help="The output file of the found URLs. default=<URL>.txt",
+)
+parser.add_argument(
+    "-S",
+    action="store_const",
+    const=True,
+    help='Enables the scraping of inline text of tags like; "<p>", "<h1>", "<li>" etc.',
+)
+parser.add_argument(
+    "-C", action="store_const", const=True, help="Enables the scraping of HTML Comments"
+)
+
+
 # Adding the corresponding scheme to beginning of the URL if not so already
 def add_http(url: str) -> str:
     if not url.startswith("http"):
@@ -29,51 +63,50 @@ def write_to_file(file, mode: str, message: str, urls: list):
         f.write("\n")
 
 
-def crawl_page(url: str, domain: str, strings, comments):
+def crawl_page(url: str, session):
     try:
-        # Sending a GET request to our target
-        r = requests.get(url, headers=HEADERS)
+        # Sending a GET request to our target inside the session we created previously
+        with session.get(url, headers=HEADERS) as r:
+            # Extracting the scheme, domain and the path from the URL
+            scheme = r.url.split(":")[0]
+            netloc = urlparse(url).netloc
+            path = urlparse(url).path
 
-        # Extracting the scheme, domain and the path from the URL
-        scheme = r.url.split(":")[0]
-        netloc = urlparse(url).netloc
-        path = urlparse(url).path
+            # Perform all the task only if the response is "200 OK"
+            if r.status_code == requests.codes.ok:
+                # Creating the BeautifulSoup object using the response we got from the target
+                soup = BeautifulSoup(
+                    UnicodeDammit(
+                        r.content, ["UTF-8", "latin-1", "iso-8859-1", "windows-1251"]
+                    ).unicode_markup,
+                    "html.parser",
+                )
 
-        # Perform all the task only if the response is "200 OK"
-        if r.status_code == requests.codes.ok:
-            # Creating the BeautifulSoup object using the response we got from the target
-            soup = BeautifulSoup(
-                UnicodeDammit(
-                    r.content, ["UTF-8", "latin-1", "iso-8859-1", "windows-1251"]
-                ).unicode_markup,
-                "html.parser",
-            )
+                print(f"Crawling {url}")
 
-            print(f"Crawling {url}")
+                # Iterating over the tags in "href" list to fetch the "href" attributes' values
+                scrape(soup, domain, scheme, netloc, path, href, "href")
+                # Iterating over the tags in "src" list to fetch the "src" attributes' values
+                scrape(soup, domain, scheme, netloc, path, src, "src")
+                # Iterating over the "blockquote" tags to fetch the "cite" attributes' values
+                scrape(soup, domain, scheme, netloc, path, "blockquote", "cite")
+                # Iterating over the "form" tags to fetch the "action" attributes' values
+                scrape(soup, domain, scheme, netloc, path, "form", "action")
 
-            # Iterating over the tags in "href" list to fetch the "href" attributes' values
-            scrape(soup, domain, scheme, netloc, path, href, "href")
-            # Iterating over the tags in "src" list to fetch the "src" attributes' values
-            scrape(soup, domain, scheme, netloc, path, src, "src")
-            # Iterating over the "blockquote" tags to fetch the "cite" attributes' values
-            scrape(soup, domain, scheme, netloc, path, "blockquote", "cite")
-            # Iterating over the "form" tags to fetch the "action" attributes' values
-            scrape(soup, domain, scheme, netloc, path, "form", "action")
+                # Search for URLs in tags has inline text
+                if args.S:
+                    scrape_inline_text(soup, domain, inline)
 
-            # Search for URLs in tags has inline text
-            if strings:
-                scrape_inline_text(soup, domain, inline)
+                # Iterating over the comments to find any URL
+                if args.C:
+                    scrape_comments(soup, domain)
 
-            # Iterating over the comments to find any URL
-            if comments:
-                scrape_comments(soup, domain)
-
-            # Remove the URL from list "PAGES_TO_CRAWL" and add it to "CRAWLED_PAGES" after finishing scraping
-            PAGES_TO_CRAWL.remove(url)
-            CRAWLED_PAGES.append(url)
-        else:
-            # Remove the URL from list "PAGES_TO_CRAWL" if it does not return "200" as a response code
-            PAGES_TO_CRAWL.remove(url)
+                # Remove the URL from list "PAGES_TO_CRAWL" and add it to "CRAWLED_PAGES" after finishing scraping
+                PAGES_TO_CRAWL.remove(url)
+                CRAWLED_PAGES.append(url)
+            else:
+                # Remove the URL from list "PAGES_TO_CRAWL" if it does not return "200" as a response code
+                PAGES_TO_CRAWL.remove(url)
     except ConnectionError:
         # Remove the URL from list "PAGES_TO_CRAWL" if it does not reply to the request
         print(f"Could not connect to '{url}'")
@@ -220,23 +253,10 @@ def scrape_comments(soup: BeautifulSoup, domain: str):
 
 def main():
     try:
-        args = parser.parse_args()
-
-        # Add http to the domain input if not so already
-        url = add_http(args.url)
-        domain = tld.get_fld(url)
-
-        if args.file:
-            output_file = f"{args.file}.txt"
-        else:
-            output_file = f"{domain}.txt"
-
-        # Add the URL taken from user to the list of links will be crawled
-        PAGES_TO_CRAWL.append(url)
-
-        # Iterate over the list until none left
-        while len(PAGES_TO_CRAWL) != 0:
-            crawl_page(PAGES_TO_CRAWL[0], domain, args.S, args.C)
+        # Create a Session and iterate over the list until none left
+        with requests.Session() as session:
+            while len(PAGES_TO_CRAWL) != 0:
+                crawl_page(PAGES_TO_CRAWL[0], session)
 
         print("\nCrawling Done.")
 
@@ -338,38 +358,18 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0",
 }
 
-examples = """
-Examples:
-[+] python3 spider.py -U example.com
-[+] python3 spider.py -U example.com -S
-[+] python3 spider.py -U example.com -C
-[+] python3 spider.py -U example.com -O example
-"""
-
-parser = argparse.ArgumentParser(
-    description="Scrape websites to find every URL in it recursively.",
-    epilog=examples,
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-)
-
-parser.add_argument(
-    "-U", dest="url", type=str, required=True, help="The main URL that will be crawled"
-)
-parser.add_argument(
-    "-O",
-    dest="file",
-    type=str,
-    help="The output file of the found URLs. default=<URL>.txt",
-)
-parser.add_argument(
-    "-S",
-    action="store_const",
-    const=True,
-    help='Enables the scraping of inline text of tags like; "<p>", "<h1>", "<li>" etc.',
-)
-parser.add_argument(
-    "-C", action="store_const", const=True, help="Enables the scraping of HTML Comments"
-)
-
 if __name__ == "__main__":
+    args = parser.parse_args()
+
+    url = add_http(args.url)
+    domain = tld.get_fld(url)
+
+    if args.file:
+        output_file = f"{args.file}.txt"
+    else:
+        output_file = f"{domain}.txt"
+
+    # Add the URL taken from user to the list of links will be crawled
+    PAGES_TO_CRAWL.append(url)
+    
     main()
