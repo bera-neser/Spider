@@ -6,6 +6,7 @@ import sys
 import tld
 import requests
 import argparse
+from threading import Thread
 from urlextract import URLExtract
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup, Comment, UnicodeDammit
@@ -14,8 +15,8 @@ from bs4 import BeautifulSoup, Comment, UnicodeDammit
 examples = """
 Examples:
 [+] python3 spider.py -U example.com
-[+] python3 spider.py -U example.com -S
-[+] python3 spider.py -U example.com -C
+[+] python3 spider.py -U example.com -S -C
+[+] python3 spider.py -U example.com -T 5
 [+] python3 spider.py -U example.com -O example
 """
 
@@ -33,6 +34,12 @@ parser.add_argument(
     dest="file",
     type=str,
     help="The output file of the found URLs. default=<URL>.txt",
+)
+parser.add_argument(
+    "-T",
+    dest="timeout",
+    type=int,
+    help="Set timeout for a request. default=3",
 )
 parser.add_argument(
     "-S",
@@ -65,8 +72,9 @@ def write_to_file(file, mode: str, message: str, urls: list):
 
 def crawl_page(url: str, session):
     try:
+        print(f"Crawling {url}")
         # Sending a GET request to our target inside the session we created previously
-        with session.get(url, headers=HEADERS) as r:
+        with session.get(url, headers=HEADERS, timeout=timeout) as r:
             # Extracting the scheme, domain and the path from the URL
             scheme = r.url.split(":")[0]
             netloc = urlparse(url).netloc
@@ -82,24 +90,39 @@ def crawl_page(url: str, session):
                     "html.parser",
                 )
 
-                print(f"Crawling {url}")
+                Threads = list()
 
                 # Iterating over the tags in "href" list to fetch the "href" attributes' values
-                scrape(soup, domain, scheme, netloc, path, href, "href")
+                thread_href = Thread(target=scrape, args=[soup, scheme, netloc, path, href, "href"])
+                thread_href.start()
+                Threads.append(thread_href)
                 # Iterating over the tags in "src" list to fetch the "src" attributes' values
-                scrape(soup, domain, scheme, netloc, path, src, "src")
+                thread_src = Thread(target=scrape, args=[soup, scheme, netloc, path, src, "src"])
+                thread_src.start()
+                Threads.append(thread_src)
                 # Iterating over the "blockquote" tags to fetch the "cite" attributes' values
-                scrape(soup, domain, scheme, netloc, path, "blockquote", "cite")
+                thread_blockquote = Thread(target=scrape, args=[soup, scheme, netloc, path, "blockquote", "cite"])
+                thread_blockquote.start()
+                Threads.append(thread_blockquote)
                 # Iterating over the "form" tags to fetch the "action" attributes' values
-                scrape(soup, domain, scheme, netloc, path, "form", "action")
+                thread_form = Thread(target=scrape, args=[soup, scheme, netloc, path, "form", "action"])
+                thread_form.start()
+                Threads.append(thread_form)
 
                 # Search for URLs in tags has inline text
                 if args.S:
-                    scrape_inline_text(soup, domain, inline)
+                    thread_text = Thread(target=scrape_inline_text, args=[soup, inline])
+                    thread_text.start()
+                    Threads.append(thread_text)
 
                 # Iterating over the comments to find any URL
                 if args.C:
-                    scrape_comments(soup, domain)
+                    thread_comments = Thread(target=scrape_comments, args=[soup])
+                    thread_comments.start()
+                    Threads.append(thread_comments)
+
+                for thread in Threads:
+                    thread.join()
 
                 # Remove the URL from list "PAGES_TO_CRAWL" and add it to "CRAWLED_PAGES" after finishing scraping
                 PAGES_TO_CRAWL.remove(url)
@@ -109,18 +132,21 @@ def crawl_page(url: str, session):
                 PAGES_TO_CRAWL.remove(url)
     except ConnectionError:
         # Remove the URL from list "PAGES_TO_CRAWL" if it does not reply to the request
-        print(f"Could not connect to '{url}'")
         PAGES_TO_CRAWL.remove(url)
+        print(f"Could not connect to '{url}'")
+    except requests.exceptions.ReadTimeout:
+        # Remove the URL from list "PAGES_TO_CRAWL" if timed out
+        PAGES_TO_CRAWL.remove(url)
+        print(f"Timed out.")
     except Exception as e:
         # Remove the URL from list "PAGES_TO_CRAWL" if it raises an Exception
         PAGES_TO_CRAWL.remove(url)
         # Print the possible error to the console to inform the user (beta)
-        print(f"Exception: {Exception}")
+        print(f"Exception: {e}")
 
 
 def scrape(
     soup: BeautifulSoup,
-    domain: str,
     scheme: str,
     netloc: str,
     path: str,
@@ -134,7 +160,7 @@ def scrape(
             or link == ""
             or any(
                 x in link
-                for x in ["#", "?", "+", "about:", "mailto:", "javascript:", "wp-json"]
+                for x in ["#", "?", "+", "about:", "mailto:", "javascript:", "wp-json", "xmlrpc.php"]
             )
         ):
             continue
@@ -224,7 +250,7 @@ def scrape(
         PAGES_TO_CRAWL.append(page)
 
 
-def scrape_inline_text(soup: BeautifulSoup, domain: str, tags: list):
+def scrape_inline_text(soup: BeautifulSoup, tags: list):
     extractor = URLExtract()
 
     for tag in soup.find_all(tags):
@@ -238,7 +264,7 @@ def scrape_inline_text(soup: BeautifulSoup, domain: str, tags: list):
                         OTHER_URLS.append(url)
 
 
-def scrape_comments(soup: BeautifulSoup, domain: str):
+def scrape_comments(soup: BeautifulSoup):
     extractor = URLExtract()
 
     for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
@@ -260,7 +286,7 @@ def main():
 
         print("\nCrawling Done.")
 
-        # Write the found pages to <domain>.txt
+        # Write the found pages to the output file
         if len(FOUND_PAGES) != 0:
             write_to_file(
                 output_file, "w", f"{len(FOUND_PAGES)} URL(s) found:\n", FOUND_PAGES
@@ -363,13 +389,16 @@ if __name__ == "__main__":
 
     url = add_http(args.url)
     domain = tld.get_fld(url)
+    output_file = f"{domain}.txt"
+    timeout = 3
 
     if args.file:
         output_file = f"{args.file}.txt"
-    else:
-        output_file = f"{domain}.txt"
+
+    if args.timeout:
+        timeout = args.timeout
 
     # Add the URL taken from user to the list of links will be crawled
     PAGES_TO_CRAWL.append(url)
-    
+
     main()
