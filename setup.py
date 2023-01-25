@@ -11,7 +11,7 @@ subprocess.check_call(
     ]
 )
 
-os.system("wget https://raw.githubusercontent.com/resilevil/Spider/master/spider.py")
-os.system("wget https://raw.githubusercontent.com/resilevil/Spider/master/requirements.txt")
+os.system("wget https://raw.githubusercontent.com/bera-neser/Spider/master/spider.py")
+os.system("wget https://raw.githubusercontent.com/bera-neser/Spider/master/requirements.txt")
 os.system("./venv/bin/pip install -r requirements.txt")
 os.remove("requirements.txt")

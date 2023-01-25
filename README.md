@@ -7,14 +7,14 @@ Install (way 1)
 ===============
 If you are lazy and do not want to run several commands on your terminal, or you do not want to download some unnecessary files, this one command alone will do everything necessary for you:
 ```sh
-curl https://raw.githubusercontent.com/resilevil/Spider/master/setup.py | python3
+curl https://raw.githubusercontent.com/bera-neser/Spider/master/setup.py | python3
 ```
 
 Install (way 2)
 ===============
 If you have no problem with cloning the whole project and want to know what's happening behind the scenes:
 ```sh
-git clone https://github.com/resilevil/Spider.git
+git clone https://github.com/bera-neser/Spider.git
 cd Spider
 python3 -m venv venv - [Optional but Recommended]
 source venv/bin/activate - [Optional but Recommended]
