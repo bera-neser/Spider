@@ -1,6 +1,5 @@
 # TODO: Analyze and crawl the links/paths are set in "robots.txt" if it's in place.
 # TODO: Analyze the "sitemap.xml" to see if there are any new resources.
-# TODO: Use more Threads to crawl faster
 
 import sys
 import tld
@@ -93,19 +92,28 @@ def crawl_page(url: str, session):
                 Threads = list()
 
                 # Iterating over the tags in "href" list to fetch the "href" attributes' values
-                thread_href = Thread(target=scrape, args=[soup, scheme, netloc, path, href, "href"])
+                thread_href = Thread(
+                    target=scrape, args=[soup, scheme, netloc, path, href, "href"]
+                )
                 thread_href.start()
                 Threads.append(thread_href)
                 # Iterating over the tags in "src" list to fetch the "src" attributes' values
-                thread_src = Thread(target=scrape, args=[soup, scheme, netloc, path, src, "src"])
+                thread_src = Thread(
+                    target=scrape, args=[soup, scheme, netloc, path, src, "src"]
+                )
                 thread_src.start()
                 Threads.append(thread_src)
                 # Iterating over the "blockquote" tags to fetch the "cite" attributes' values
-                thread_blockquote = Thread(target=scrape, args=[soup, scheme, netloc, path, "blockquote", "cite"])
+                thread_blockquote = Thread(
+                    target=scrape,
+                    args=[soup, scheme, netloc, path, "blockquote", "cite"],
+                )
                 thread_blockquote.start()
                 Threads.append(thread_blockquote)
                 # Iterating over the "form" tags to fetch the "action" attributes' values
-                thread_form = Thread(target=scrape, args=[soup, scheme, netloc, path, "form", "action"])
+                thread_form = Thread(
+                    target=scrape, args=[soup, scheme, netloc, path, "form", "action"]
+                )
                 thread_form.start()
                 Threads.append(thread_form)
 
@@ -160,7 +168,16 @@ def scrape(
             or link == ""
             or any(
                 x in link
-                for x in ["#", "?", "+", "about:", "mailto:", "javascript:", "wp-json", "xmlrpc.php"]
+                for x in [
+                    "#",
+                    "?",
+                    "+",
+                    "about:",
+                    "mailto:",
+                    "javascript:",
+                    "wp-json",
+                    "xmlrpc.php",
+                ]
             )
         ):
             continue
