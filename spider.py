@@ -69,7 +69,7 @@ def write_to_file(file, mode: str, message: str, urls: list):
         f.write("\n")
 
 
-def crawl_page(url: str, session):
+def crawl_page(url: str, session: requests.Session):
     try:
         print(f"Crawling {url}")
         # Sending a GET request to our target inside the session we created previously
@@ -172,8 +172,10 @@ def scrape(
                     "#",
                     "?",
                     "+",
+                    "../",
                     "about:",
                     "mailto:",
+                    "callto:",
                     "javascript:",
                     "wp-json",
                     "xmlrpc.php",
