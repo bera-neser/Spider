@@ -30,6 +30,21 @@ if you did not run the last two commands, or your <code>pip</code> command refer
 pip3 install -r requirements.txt
 ```
 
+Use [Docker](https://docs.docker.com/get-docker/) (way 3)
+===============
+```sh
+git clone https://github.com/bera-neser/Spider.git
+cd Spider
+docker build -t spider .
+
+# usage ->  docker run --rm spider [-h] -U URL [-O FILE] [-T TIMEOUT] [-S] [-C]
+
+docker run --rm spider --help
+docker run --rm spider -U example.com
+
+```
+
+
 Usage
 =====
 First, you should activate the virtual environment (if you did not make one and installed the packages globally on your system, or did it already in the installing stage, skip this step):
