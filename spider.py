@@ -1,6 +1,7 @@
 # TODO: Analyze and crawl the links/paths are set in "robots.txt" if it's in place.
 # TODO: Analyze the "sitemap.xml" to see if there are any new resources.
 
+import re
 import sys
 import tld
 import requests
@@ -71,7 +72,6 @@ def write_to_file(file, mode: str, message: str, urls: list):
 
 def crawl_page(url: str, session: requests.Session):
     try:
-        print(f"Crawling {url}")
         # Sending a GET request to our target inside the session we created previously
         with session.get(url, headers=HEADERS, timeout=timeout) as r:
             # Extracting the scheme, domain and the path from the URL
@@ -81,6 +81,9 @@ def crawl_page(url: str, session: requests.Session):
 
             # Perform all the task only if the response is "200 OK"
             if r.status_code == requests.codes.ok:
+                # Inform the user which page is being crawled
+                print(f"Crawling {url}")
+
                 # Creating the BeautifulSoup object using the response we got from the target
                 soup = BeautifulSoup(
                     UnicodeDammit(
@@ -163,6 +166,13 @@ def scrape(
 ):
     for tag in soup.find_all(tags):
         link: str = tag.get(attribute)
+
+        match = ""
+        if link and "." in link:
+            match = re.search(r"^\b(1[6-9]|2[0-9]|3[0-2])\b$", link.split(".")[1])
+        if match:
+            match = match.string
+
         if (
             link is None
             or link == ""
@@ -173,12 +183,17 @@ def scrape(
                     "?",
                     "+",
                     "../",
+                    "data:",
                     "about:",
                     "mailto:",
                     "callto:",
                     "javascript:",
                     "wp-json",
                     "xmlrpc.php",
+                    "android-app://",
+                    "10.",
+                    f"172.{match}",
+                    "192.168.",
                 ]
             )
         ):
@@ -319,13 +334,16 @@ def main():
                 OTHER_URLS,
             )
 
-        print(
-            f"{len(FOUND_PAGES) + len(OTHER_URLS)} found URL has been written to {output_file}"
-        )
+        if len(FOUND_PAGES) != 0 or len(OTHER_URLS) != 0:
+            print(
+                f"{len(FOUND_PAGES) + len(OTHER_URLS)} found URL has been written to {output_file}"
+            )
+        else:
+            print("\nNo URL found.")
     except KeyboardInterrupt:
         # If the user decided to stop the program, write the found pages until that point to the output file
         if len(FOUND_PAGES) != 0 or len(OTHER_URLS) != 0:
-            print(f"\nWriting to {output_file} and exitting...")
+            print(f"\nWriting to {len(FOUND_PAGES) + len(OTHER_URLS)} URL(s) {output_file} and exitting...")
 
         if len(FOUND_PAGES) != 0:
             write_to_file(
@@ -373,6 +391,7 @@ EXTENSIONS = (
     ".jpg",
     ".jpeg",
     ".js",
+    ".json",
     ".mov",
     ".mpeg-1",
     ".mpeg-2",
