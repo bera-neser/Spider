@@ -1,5 +1,4 @@
 # TODO: Analyze and crawl the links/paths are set in "robots.txt" if it's in place.
-# TODO: Analyze the "sitemap.xml" to see if there are any new resources.
 
 import re
 import sys
@@ -14,10 +13,10 @@ from bs4 import BeautifulSoup, Comment, UnicodeDammit
 
 examples = """
 Examples:
-[+] python3 spider.py -U example.com
-[+] python3 spider.py -U example.com -S -C
-[+] python3 spider.py -U example.com -T 5
-[+] python3 spider.py -U example.com -O example
+[+] python3 spider.py -u example.com
+[+] python3 spider.py -u example.com -s -c -x
+[+] python3 spider.py -u example.com -t 5
+[+] python3 spider.py -u example.com -o example
 """
 
 parser = argparse.ArgumentParser(
@@ -27,28 +26,31 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument(
-    "-U", dest="url", type=str, required=True, help="The main URL that will be crawled"
+    "-u", dest="url", type=str, required=True, help="The main URL that will be crawled"
 )
 parser.add_argument(
-    "-O",
+    "-o",
     dest="file",
     type=str,
     help="The output file of the found URLs. default=<URL>.txt",
 )
 parser.add_argument(
-    "-T",
+    "-t",
     dest="timeout",
     type=int,
     help="Set timeout for a request. default=3",
 )
 parser.add_argument(
-    "-S",
+    "-s",
     action="store_const",
     const=True,
     help='Enables the scraping of inline text of tags like; "<p>", "<h1>", "<li>" etc.',
 )
 parser.add_argument(
-    "-C", action="store_const", const=True, help="Enables the scraping of HTML Comments"
+    "-c", action="store_const", const=True, help="Enables the scraping of HTML Comments"
+)
+parser.add_argument(
+    "-x", action="store_const", const=True, help="Enables the scraping of sitemap.xml"
 )
 
 
@@ -70,6 +72,16 @@ def write_to_file(file, mode: str, message: str, urls: list):
         f.write("\n")
 
 
+# Returns a BeautifulSoup object of the given content
+def get_soup(content, parser: str):
+    return BeautifulSoup(
+        UnicodeDammit(
+            content, ["UTF-8", "latin-1", "iso-8859-1", "windows-1251"]
+        ).unicode_markup,
+        parser,
+    )
+
+
 def crawl_page(url: str, session: requests.Session):
     try:
         # Sending a GET request to our target inside the session we created previously
@@ -85,12 +97,7 @@ def crawl_page(url: str, session: requests.Session):
                 print(f"Crawling {url}")
 
                 # Creating the BeautifulSoup object using the response we got from the target
-                soup = BeautifulSoup(
-                    UnicodeDammit(
-                        r.content, ["UTF-8", "latin-1", "iso-8859-1", "windows-1251"]
-                    ).unicode_markup,
-                    "html.parser",
-                )
+                soup = get_soup(r.content, "html.parser")
 
                 Threads = list()
 
@@ -121,17 +128,18 @@ def crawl_page(url: str, session: requests.Session):
                 Threads.append(thread_form)
 
                 # Search for URLs in tags has inline text
-                if args.S:
+                if args.s:
                     thread_text = Thread(target=scrape_inline_text, args=[soup, inline])
                     thread_text.start()
                     Threads.append(thread_text)
 
                 # Iterating over the comments to find any URL
-                if args.C:
+                if args.c:
                     thread_comments = Thread(target=scrape_comments, args=[soup])
                     thread_comments.start()
                     Threads.append(thread_comments)
 
+                # Wait other threads to finish
                 for thread in Threads:
                     thread.join()
 
@@ -148,7 +156,7 @@ def crawl_page(url: str, session: requests.Session):
     except requests.exceptions.ReadTimeout:
         # Remove the URL from list "PAGES_TO_CRAWL" if timed out
         PAGES_TO_CRAWL.remove(url)
-        print(f"Timed out.")
+        print(f"Timed out on {url}")
     except Exception as e:
         # Remove the URL from list "PAGES_TO_CRAWL" if it raises an Exception
         PAGES_TO_CRAWL.remove(url)
@@ -190,6 +198,7 @@ def scrape(
                     "javascript:",
                     "wp-json",
                     "xmlrpc.php",
+                    "sitemap.xml",
                     "android-app://",
                     "10.",
                     f"172.{match}",
@@ -236,49 +245,7 @@ def scrape(
         if page not in FOUND_PAGES:
             FOUND_PAGES.append(page)
 
-        if "www." in page and (
-            (page in CRAWLED_PAGES or page in PAGES_TO_CRAWL)
-            or (page[:-1] in CRAWLED_PAGES or page[:-1] in PAGES_TO_CRAWL)
-            or (f"{page}/" in CRAWLED_PAGES or f"{page}/" in PAGES_TO_CRAWL)
-            or (
-                f'{page.split("www.")[0]}{page.split("www.")[1]}' in CRAWLED_PAGES
-                or f'{page.split("www.")[0]}{page.split("www.")[1]}' in PAGES_TO_CRAWL
-            )
-            or (
-                f'{page.split("www.")[0]}{page.split("www.")[1]}/' in CRAWLED_PAGES
-                or f'{page.split("www.")[0]}{page.split("www.")[1]}/' in PAGES_TO_CRAWL
-            )
-            or (
-                f'{page.split("www.")[0]}{(page.split("www.")[1])[:-1]}'
-                in CRAWLED_PAGES
-                or f'{page.split("www.")[0]}{(page.split("www.")[1])[:-1]}'
-                in PAGES_TO_CRAWL
-            )
-        ):
-            continue
-        elif not "www." in page and (
-            (page in CRAWLED_PAGES or page in PAGES_TO_CRAWL)
-            or (page[:-1] in CRAWLED_PAGES or page[:-1] in PAGES_TO_CRAWL)
-            or (f"{page}/" in CRAWLED_PAGES or f"{page}/" in PAGES_TO_CRAWL)
-            or (
-                f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}'
-                in CRAWLED_PAGES
-                or f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}'
-                in PAGES_TO_CRAWL
-            )
-            or (
-                f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}/'
-                in CRAWLED_PAGES
-                or f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}/'
-                in PAGES_TO_CRAWL
-            )
-            or (
-                f'{"".join(page.partition("//")[0:2])}www.{("".join(page.partition("//")[2:]))[:-1]}'
-                in CRAWLED_PAGES
-                or f'{"".join(page.partition("//")[0:2])}www.{("".join(page.partition("//")[2:]))[:-1]}'
-                in PAGES_TO_CRAWL
-            )
-        ):
+        if crawled(page):
             continue
 
         PAGES_TO_CRAWL.append(page)
@@ -311,10 +278,90 @@ def scrape_comments(soup: BeautifulSoup):
                     OTHER_URLS.append(url)
 
 
+def scrape_sitemap(soup: BeautifulSoup):
+    for loc in soup.find_all("loc"):
+        link: str = loc.string
+        if link is None or link == "":
+            continue
+        if link.endswith(".xml"):
+            if not link in CRAWLED_XMLS:
+                XML_SITES.append(link)
+        elif link.endswith(EXTENSIONS):
+            if link not in FOUND_PAGES:
+                FOUND_PAGES.append(link)
+            continue
+        elif not crawled(link):
+            PAGES_TO_CRAWL.append(link)
+
+
+# Returns True if the given page has been crawled before
+def crawled(page: str):
+    if "www." in page and (
+        (page in CRAWLED_PAGES or page in PAGES_TO_CRAWL)
+        or (page[:-1] in CRAWLED_PAGES or page[:-1] in PAGES_TO_CRAWL)
+        or (f"{page}/" in CRAWLED_PAGES or f"{page}/" in PAGES_TO_CRAWL)
+        or (
+            f'{page.split("www.")[0]}{page.split("www.")[1]}' in CRAWLED_PAGES
+            or f'{page.split("www.")[0]}{page.split("www.")[1]}' in PAGES_TO_CRAWL
+        )
+        or (
+            f'{page.split("www.")[0]}{page.split("www.")[1]}/' in CRAWLED_PAGES
+            or f'{page.split("www.")[0]}{page.split("www.")[1]}/' in PAGES_TO_CRAWL
+        )
+        or (
+            f'{page.split("www.")[0]}{(page.split("www.")[1])[:-1]}' in CRAWLED_PAGES
+            or f'{page.split("www.")[0]}{(page.split("www.")[1])[:-1]}'
+            in PAGES_TO_CRAWL
+        )
+    ):
+        return True
+    elif not "www." in page and (
+        (page in CRAWLED_PAGES or page in PAGES_TO_CRAWL)
+        or (page[:-1] in CRAWLED_PAGES or page[:-1] in PAGES_TO_CRAWL)
+        or (f"{page}/" in CRAWLED_PAGES or f"{page}/" in PAGES_TO_CRAWL)
+        or (
+            f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}'
+            in CRAWLED_PAGES
+            or f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}'
+            in PAGES_TO_CRAWL
+        )
+        or (
+            f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}/'
+            in CRAWLED_PAGES
+            or f'{"".join(page.partition("//")[0:2])}www.{"".join(page.partition("//")[2:])}/'
+            in PAGES_TO_CRAWL
+        )
+        or (
+            f'{"".join(page.partition("//")[0:2])}www.{("".join(page.partition("//")[2:]))[:-1]}'
+            in CRAWLED_PAGES
+            or f'{"".join(page.partition("//")[0:2])}www.{("".join(page.partition("//")[2:]))[:-1]}'
+            in PAGES_TO_CRAWL
+        )
+    ):
+        return True
+    return False
+
+
 def main():
     try:
         # Create a Session and iterate over the list until none left
         with requests.Session() as session:
+            # Crawl the "sitemap.xml" if the user specified switch -x
+            if args.x:
+                XML_SITES.append(f"{url}/sitemap.xml")
+
+                while len(XML_SITES) != 0:
+                    with session.get(
+                        sitemap := XML_SITES[0], headers=HEADERS, timeout=timeout
+                    ) as r:
+                        if r.status_code == requests.codes.ok:
+                            print(f"Crawling {sitemap}")
+                            soup = get_soup(r.content, "xml")
+                            scrape_sitemap(soup)
+                        CRAWLED_XMLS.append(sitemap)
+                        XML_SITES.remove(sitemap)
+
+            # Crawl all the pages
             while len(PAGES_TO_CRAWL) != 0:
                 crawl_page(PAGES_TO_CRAWL[0], session)
 
@@ -339,24 +386,28 @@ def main():
                 f"{len(FOUND_PAGES) + len(OTHER_URLS)} found URL has been written to {output_file}"
             )
         else:
-            print("\nNo URL found.")
+            print("\nNot found any URL.")
     except KeyboardInterrupt:
         # If the user decided to stop the program, write the found pages until that point to the output file
         if len(FOUND_PAGES) != 0 or len(OTHER_URLS) != 0:
-            print(f"\nWriting to {len(FOUND_PAGES) + len(OTHER_URLS)} URL(s) {output_file} and exitting...")
-
-        if len(FOUND_PAGES) != 0:
-            write_to_file(
-                output_file, "w", f"{len(FOUND_PAGES)} URL(s) found:\n", FOUND_PAGES
+            print(
+                f"\nWriting {len(FOUND_PAGES) + len(OTHER_URLS)} URL(s) to {output_file} and exitting..."
             )
 
-        if len(OTHER_URLS) != 0:
-            write_to_file(
-                output_file,
-                "a",
-                f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
-                OTHER_URLS,
-            )
+            if len(FOUND_PAGES) != 0:
+                write_to_file(
+                    output_file, "w", f"{len(FOUND_PAGES)} URL(s) found:\n", FOUND_PAGES
+                )
+
+            if len(OTHER_URLS) != 0:
+                write_to_file(
+                    output_file,
+                    "a",
+                    f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
+                    OTHER_URLS,
+                )
+        else:
+            print("\nNot found any URL.")
         sys.exit("\nGoodbye..")
 
 
@@ -372,12 +423,18 @@ FOUND_PAGES = list()
 # URLs those are from different host
 OTHER_URLS = list()
 
+# XML sites
+XML_SITES = list()
+
+# List of crawled XML sites
+CRAWLED_XMLS = list()
+
 # Tags to find in a page
 href = ["a", "base", "link"]
 src = ["audio", "embed", "frame", "iframe", "input", "script", "img", "video"]
 inline = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
 
-# Extensions that we do not want to scrape, just adding to the "FOUND_PAGES" list
+# Extensions that we do not want to scrape, but only adding to the "FOUND_PAGES" list
 EXTENSIONS = (
     ".apng",
     ".avi",
