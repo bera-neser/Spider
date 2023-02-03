@@ -226,11 +226,10 @@ def scrape_inline_text(soup: BeautifulSoup, tags: list):
         if not tag.string is None:
             for url in extractor.find_urls(tag.string):
                 if tld.get_fld(url, fail_silently=True) == domain:
-                    if url not in FOUND_PAGES:
-                        FOUND_PAGES.append(url)
-                else:
-                    if url not in OTHER_URLS:
-                        OTHER_URLS.append(url)
+                    if not crawled(url):
+                        PAGES_TO_CRAWL.append(url)
+                elif url not in OTHER_URLS:
+                    OTHER_URLS.append(url)
 
 
 def scrape_comments(soup: BeautifulSoup):
@@ -239,11 +238,10 @@ def scrape_comments(soup: BeautifulSoup):
     for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
         for url in extractor.find_urls(comment):
             if tld.get_fld(url, fail_silently=True) == domain:
-                if url not in FOUND_PAGES:
-                    FOUND_PAGES.append(url)
-            else:
-                if url not in OTHER_URLS:
-                    OTHER_URLS.append(url)
+                if not crawled(url):
+                    PAGES_TO_CRAWL.append(url)
+            elif url not in OTHER_URLS:
+                OTHER_URLS.append(url)
 
 
 def scrape_sitemap(soup: BeautifulSoup):
@@ -266,7 +264,9 @@ def scrape_sitemap(soup: BeautifulSoup):
 def scrape_robots(r: requests.Response):
     for path in r.iter_lines():
         if "Disallow:" in path.decode() or "Allow:" in path.decode():
-            PAGES_TO_CRAWL.append(f"{url}{path.decode().split(':')[1].strip()}")
+            page = f"{url}{path.decode().split(':')[1].strip()}"
+            if not crawled(page):
+                PAGES_TO_CRAWL.append(page)
 
 
 # Returns True if the given page has been crawled before
@@ -335,13 +335,17 @@ def main():
                             scrape_sitemap(soup)
                         CRAWLED_XMLS.append(sitemap)
                         XML_SITES.remove(sitemap)
-
+            # Crawl the "robots.txt" if the user specified switch -r
             if args.r:
                 with session.get(
                     f"{url}/robots.txt", headers=HEADERS, timeout=timeout
                 ) as r:
                     if r.status_code == requests.codes.ok:
                         scrape_robots(r)
+
+            # Add the main URL to the list if not found neither in "sitemap.xml" nor in "robots.txt".
+            if not crawled(url):
+                PAGES_TO_CRAWL.append(url)
 
             # Crawl all the pages
             while len(PAGES_TO_CRAWL) != 0:
@@ -420,7 +424,6 @@ inline = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
 IGNORE = [
     "#",
     "?",
-    "+",
     "../",
     "data:",
     "about:",
@@ -493,8 +496,5 @@ if __name__ == "__main__":
 
     if args.timeout:
         timeout = args.timeout
-
-    # Add the URL taken from user to the list of links will be crawled
-    PAGES_TO_CRAWL.append(url)
 
     main()
