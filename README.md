@@ -30,17 +30,17 @@ if you did not run the last two commands, or your <code>pip</code> command refer
 pip3 install -r requirements.txt
 ```
 
-Use [Docker](https://docs.docker.com/get-docker/) (way 3)
+Install using [Docker](https://docs.docker.com/get-docker/) (way 3)
 ===============
 ```sh
 git clone https://github.com/bera-neser/Spider.git
 cd Spider
 docker build -t spider .
 
-# usage ->  docker run --rm spider [-h] -U URL [-O FILE] [-T TIMEOUT] [-S] [-C]
+# usage ->  docker run --rm spider [-h] -u URL [-o FILE] [-t TIMEOUT] [-s] [-c] [-x] [-r]
 
 docker run --rm spider --help
-docker run --rm spider -U example.com
+docker run --rm spider -u example.com
 
 ```
 
