@@ -1,6 +1,3 @@
-# TODO: Analyze and crawl the links/paths are set in "robots.txt" if it's in place.
-
-import re
 import sys
 import tld
 import requests
@@ -14,7 +11,7 @@ from bs4 import BeautifulSoup, Comment, UnicodeDammit
 examples = """
 Examples:
 [+] python3 spider.py -u example.com
-[+] python3 spider.py -u example.com -s -c -x
+[+] python3 spider.py -u example.com -s -c -x -r
 [+] python3 spider.py -u example.com -t 5
 [+] python3 spider.py -u example.com -o example
 """
@@ -51,6 +48,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "-x", action="store_const", const=True, help="Enables the scraping of sitemap.xml"
+)
+parser.add_argument(
+    "-r", action="store_const", const=True, help="Enables the scraping of robots.txt"
 )
 
 
@@ -175,37 +175,7 @@ def scrape(
     for tag in soup.find_all(tags):
         link: str = tag.get(attribute)
 
-        match = ""
-        if link and "." in link:
-            match = re.search(r"^\b(1[6-9]|2[0-9]|3[0-2])\b$", link.split(".")[1])
-        if match:
-            match = match.string
-
-        if (
-            link is None
-            or link == ""
-            or any(
-                x in link
-                for x in [
-                    "#",
-                    "?",
-                    "+",
-                    "../",
-                    "data:",
-                    "about:",
-                    "mailto:",
-                    "callto:",
-                    "javascript:",
-                    "wp-json",
-                    "xmlrpc.php",
-                    "sitemap.xml",
-                    "android-app://",
-                    "10.",
-                    f"172.{match}",
-                    "192.168.",
-                ]
-            )
-        ):
+        if link is None or link == "" or any(x in link for x in IGNORE):
             continue
         elif tld.get_fld(link, fail_silently=True) is None:
             if link.startswith("/"):
@@ -245,10 +215,8 @@ def scrape(
         if page not in FOUND_PAGES:
             FOUND_PAGES.append(page)
 
-        if crawled(page):
-            continue
-
-        PAGES_TO_CRAWL.append(page)
+        if not crawled(page):
+            PAGES_TO_CRAWL.append(page)
 
 
 def scrape_inline_text(soup: BeautifulSoup, tags: list):
@@ -281,6 +249,7 @@ def scrape_comments(soup: BeautifulSoup):
 def scrape_sitemap(soup: BeautifulSoup):
     for loc in soup.find_all("loc"):
         link: str = loc.string
+
         if link is None or link == "":
             continue
         if link.endswith(".xml"):
@@ -292,6 +261,12 @@ def scrape_sitemap(soup: BeautifulSoup):
             continue
         elif not crawled(link):
             PAGES_TO_CRAWL.append(link)
+
+
+def scrape_robots(r: requests.Response):
+    for path in r.iter_lines():
+        if "Disallow:" in path.decode() or "Allow:" in path.decode():
+            PAGES_TO_CRAWL.append(f"{url}{path.decode().split(':')[1].strip()}")
 
 
 # Returns True if the given page has been crawled before
@@ -361,30 +336,37 @@ def main():
                         CRAWLED_XMLS.append(sitemap)
                         XML_SITES.remove(sitemap)
 
+            if args.r:
+                with session.get(
+                    f"{url}/robots.txt", headers=HEADERS, timeout=timeout
+                ) as r:
+                    if r.status_code == requests.codes.ok:
+                        scrape_robots(r)
+
             # Crawl all the pages
             while len(PAGES_TO_CRAWL) != 0:
                 crawl_page(PAGES_TO_CRAWL[0], session)
 
         print("\nCrawling Done.")
 
-        # Write the found pages to the output file
-        if len(FOUND_PAGES) != 0:
-            write_to_file(
-                output_file, "w", f"{len(FOUND_PAGES)} URL(s) found:\n", FOUND_PAGES
-            )
-
-        if len(OTHER_URLS) != 0:
-            write_to_file(
-                output_file,
-                "a",
-                f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
-                OTHER_URLS,
-            )
-
         if len(FOUND_PAGES) != 0 or len(OTHER_URLS) != 0:
             print(
                 f"{len(FOUND_PAGES) + len(OTHER_URLS)} found URL has been written to {output_file}"
             )
+
+            # Write the found pages to the output file
+            if len(FOUND_PAGES) != 0:
+                write_to_file(
+                    output_file, "w", f"{len(FOUND_PAGES)} URL(s) found:\n", FOUND_PAGES
+                )
+
+            if len(OTHER_URLS) != 0:
+                write_to_file(
+                    output_file,
+                    "a",
+                    f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
+                    OTHER_URLS,
+                )
         else:
             print("\nNot found any URL.")
     except KeyboardInterrupt:
@@ -433,6 +415,25 @@ CRAWLED_XMLS = list()
 href = ["a", "base", "link"]
 src = ["audio", "embed", "frame", "iframe", "input", "script", "img", "video"]
 inline = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
+
+# Ignore the link if any of the below is in place
+IGNORE = [
+    "#",
+    "?",
+    "+",
+    "../",
+    "data:",
+    "about:",
+    "mailto:",
+    "callto:",
+    "javascript:",
+    "wp-json",
+    "xmlrpc.php",
+    "sitemap.xml",
+    ".webmanifest",
+    "ios-app://",
+    "android-app://",
+]
 
 # Extensions that we do not want to scrape, but only adding to the "FOUND_PAGES" list
 EXTENSIONS = (
