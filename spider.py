@@ -323,7 +323,7 @@ def main():
         with requests.Session() as session:
             # Crawl the "sitemap.xml" if the user specified switch -x
             if args.x:
-                XML_SITES.append(f"{url}/sitemap.xml")
+                XML_SITES.append(f"{scheme}://{domain}/sitemap.xml")
 
                 while len(XML_SITES) != 0:
                     with session.get(
@@ -338,9 +338,10 @@ def main():
             # Crawl the "robots.txt" if the user specified switch -r
             if args.r:
                 with session.get(
-                    f"{url}/robots.txt", headers=HEADERS, timeout=timeout
+                    f"{scheme}://{domain}/robots.txt", headers=HEADERS, timeout=timeout
                 ) as r:
                     if r.status_code == requests.codes.ok:
+                        print(f"Crawling {scheme}://{domain}/robots.txt")
                         scrape_robots(r)
 
             # Add the main URL to the list if not found neither in "sitemap.xml" nor in "robots.txt".
@@ -487,12 +488,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     url = add_http(args.url)
+    scheme = urlparse(url).scheme
     domain = tld.get_fld(url)
     output_file = f"{domain}.txt"
     timeout = 3
 
     if args.file:
-        output_file = f"{args.file}.txt"
+        output_file = f"{args.file}"
 
     if args.timeout:
         timeout = args.timeout
