@@ -1,3 +1,4 @@
+import os
 import sys
 import tld
 import requests
@@ -11,9 +12,9 @@ from bs4 import BeautifulSoup, Comment, UnicodeDammit
 examples = """
 Examples:
 [+] python3 spider.py -u example.com
-[+] python3 spider.py -u example.com -s -c -x -r
-[+] python3 spider.py -u example.com -t 5
 [+] python3 spider.py -u example.com -o example
+[+] python3 spider.py -u example.com -t 5
+[+] python3 spider.py -u example.com -s -c -x -r
 """
 
 parser = argparse.ArgumentParser(
@@ -485,6 +486,10 @@ HEADERS = {
 }
 
 if __name__ == "__main__":
+    if not os.access(os.getcwd(), os.W_OK):
+        print("You must have write permission in the directory where you run the script!")
+        sys.exit("Exitting.")
+
     args = parser.parse_args()
 
     url = add_http(args.url)
