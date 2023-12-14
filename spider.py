@@ -14,7 +14,7 @@ Examples:
 [+] python3 spider.py -u example.com
 [+] python3 spider.py -u example.com -o example
 [+] python3 spider.py -u example.com -t 5
-[+] python3 spider.py -u example.com -s -c -x -r
+[+] python3 spider.py -u example.com -scxr
 """
 
 parser = argparse.ArgumentParser(
@@ -367,12 +367,20 @@ def main():
                 )
 
             if len(OTHER_URLS) != 0:
-                write_to_file(
-                    output_file,
-                    "a",
-                    f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
-                    OTHER_URLS,
-                )
+                if len(FOUND_PAGES) != 0:
+                    write_to_file(
+                        output_file,
+                        "a",
+                        f"\n{len(OTHER_URLS)} URL(s) found from other domains:\n",
+                        OTHER_URLS
+                    )
+                else:
+                    write_to_file(
+                        output_file,
+                        "w",
+                        f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
+                        OTHER_URLS
+                    )
         else:
             print("\nNot found any URL.")
     except KeyboardInterrupt:
@@ -388,12 +396,20 @@ def main():
                 )
 
             if len(OTHER_URLS) != 0:
-                write_to_file(
-                    output_file,
-                    "a",
-                    f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
-                    OTHER_URLS,
-                )
+                if len(FOUND_PAGES) != 0:
+                    write_to_file(
+                        output_file,
+                        "a",
+                        f"\n{len(OTHER_URLS)} URL(s) found from other domains:\n",
+                        OTHER_URLS
+                    )
+                else:
+                    write_to_file(
+                        output_file,
+                        "w",
+                        f"{len(OTHER_URLS)} URL(s) found from other domains:\n",
+                        OTHER_URLS
+                    )
         else:
             print("\nNot found any URL.")
         sys.exit("\nGoodbye..")
