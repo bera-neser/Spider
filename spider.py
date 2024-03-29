@@ -58,11 +58,11 @@ parser.add_argument(
 # Adding the corresponding scheme to beginning of the URL if not so already
 def add_http(url: str) -> str:
     if not url.startswith("http"):
-        return (
-            tld.get_tld(url, as_object=True, fix_protocol=True).parsed_url.scheme
-            + "://"
-            + url
-        )
+        try:
+            requests.get(f"https://{url}", timeout=timeout)
+            return f"https://{url}"
+        except requests.exceptions.ConnectionError:
+            return f"http://{url}"
     return url
 
 
@@ -353,11 +353,11 @@ def main():
             while len(PAGES_TO_CRAWL) != 0:
                 crawl_page(PAGES_TO_CRAWL[0], session)
 
-        print("\nCrawling Done.")
+        print(f"\n{len(CRAWLED_PAGES)} pages have been crawled.")
 
         if len(FOUND_PAGES) != 0 or len(OTHER_URLS) != 0:
             print(
-                f"{len(FOUND_PAGES) + len(OTHER_URLS)} found URL has been written to {output_file}"
+                f"{len(FOUND_PAGES) + len(OTHER_URLS)} URL have been found and written to \"{output_file}\"."
             )
 
             # Write the found pages to the output file
@@ -458,12 +458,15 @@ IGNORE = [
 
 # Extensions that we do not want to scrape, but only adding to the "FOUND_PAGES" list
 EXTENSIONS = (
+    ".AppImage",
     ".apng",
     ".avi",
     ".avif",
     ".bmp",
     ".cur",
     ".css",
+    ".dmg",
+    ".exe",
     ".gif",
     ".ico",
     ".jfif",
@@ -508,11 +511,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    timeout = 3
     url = add_http(args.url)
     scheme = urlparse(url).scheme
     domain = tld.get_fld(url)
     output_file = f"{domain}.txt"
-    timeout = 3
 
     if args.file:
         output_file = f"{args.file}"
