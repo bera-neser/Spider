@@ -44,7 +44,6 @@ docker build -t spider .
 
 docker run --rm spider --help
 docker run --rm spider -u example.com
-
 ```
 
 # Usage
